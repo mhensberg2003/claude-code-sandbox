@@ -61,8 +61,8 @@ if [[ "$UPDATE" == 1 ]]; then
         die "failed to download an updated Wrapper (check network / repo)."
     fi
     if have docker && docker info >/dev/null 2>&1 && [[ "$IMAGE" == */* ]]; then
-        echo "cc-sandbox: pulling latest image $IMAGE"
-        docker pull "$IMAGE" >/dev/null && echo "  image up to date" || warn "image pull failed"
+        echo "cc-sandbox: pulling latest image (~1.8GB first time; shows progress below)"
+        docker pull "$IMAGE" && echo "  image up to date" || warn "image pull failed"
     fi
     echo "cc-sandbox: done."
     exit 0
