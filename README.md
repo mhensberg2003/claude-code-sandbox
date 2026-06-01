@@ -1,0 +1,111 @@
+# Claude Code Sandbox
+
+Run Claude Code with `--dangerously-skip-permissions` **safely**, so the agent can work unattended
+without being able to damage your machine, escape the project, or quietly exfiltrate your secrets.
+
+```bash
+cd my-project
+cc-sandbox
+```
+
+That launches Claude Code inside a hardened Docker container scoped to the current project. The agent
+gets full reasoning power and internet; the **commands it runs** get no network except package
+registries; and **nothing on your host** — SSH keys, cloud creds, other projects — is reachable.
+
+> Built for a team. The security policy is baked into a central image and applies the same on every
+> laptop (WSL primary, macOS supported). See [`CONTEXT.md`](./CONTEXT.md) for the full design and
+> [`docs/adr/`](./docs/adr/) for the load-bearing decisions.
+
+---
+
+## Threat model (what "safe" means here)
+
+Level **B — adversarial content**: assume a malicious repo, dependency, or web page can prompt-inject
+the agent. The Sandbox defends against that. It does **not** assume the agent will mount a kernel
+breakout (Level C / per-session VM), and it does **not** try to stop *you* from sabotaging your own
+laptop (you own the host — see "Boundaries").
+
+**Worst case if the agent is fully compromised:** it can leak *this one project's source* and *your
+own Claude login token* (rotatable via `claude login`) — via WebFetch. It cannot reach your host
+credentials, other projects, MCP-connected accounts, or run autonomous command-network malware.
+
+## How it works
+
+| Layer | Policy |
+|---|---|
+| **Agent** (Claude itself, uid `claude`) | **Full internet** — API, WebSearch, WebFetch, context7 MCP |
+| **Commands** (every Bash command, uid `runner`) | **No network except a registry allowlist** (npm/PyPI/Go/crates/…) via a no-log CONNECT proxy |
+| **Filesystem** | Only the current project is mounted (read-write). No `$HOME`, no host env, no SSH/cloud creds |
+| **Auth** | Only your `claudeAiOauth` token is injected (never `mcpOAuth` or anything else) |
+| **Firewall** | Per-uid `nftables`, set once by root then made immutable (agent can't disable it) |
+| **Hardening** | read-only rootfs, dropped caps, pids/memory limits, no Docker socket, ephemeral container |
+| **Git** | Agent commits (name/email injected); **never** pushes — you push from the host after review |
+
+The split is enforced by `CLAUDE_CODE_SHELL_PREFIX`, which routes every agent command through a
+wrapper that drops to the `runner` identity. Details in [ADR-0001](./docs/adr/0001-network-posture-secret-confinement-not-egress.md).
+
+## Install
+
+Requires **Docker** installed and running.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mhensberg2003/claude-code-sandbox/main/install.sh | bash
+```
+
+This drops the small, auditable `cc-sandbox` Wrapper onto your `PATH`. The policy image is pulled
+from GHCR (`:stable`) on each run via `--pull=always`, so security fixes reach you automatically —
+re-run the installer only when the Wrapper script itself changes.
+
+First time: run `claude login` on your host once so the Wrapper can extract your OAuth token.
+
+## Usage
+
+```bash
+cc-sandbox                # launch in the current project (fresh session)
+cc-sandbox --resume       # resume the previous session for this project
+cc-sandbox --fresh        # wipe this project's cached dependencies first
+cc-sandbox --port 4321    # also forward an extra dev-server port (common ports are auto-forwarded)
+cc-sandbox --unsafe       # ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
+cc-sandbox -- -p "..."    # pass arguments through to claude
+```
+
+Common dev ports (3000, 5173, 8080, …) are auto-forwarded to `127.0.0.1` so you can open the app in
+your host browser.
+
+## Boundaries (read this)
+
+- **The Sandbox protects against the agent/repo/dependencies, not against you.** The Wrapper is a
+  file on a machine you own; you *can* weaken it (edit it, or use `--unsafe`). The goal is
+  **safe-by-default, with bypass being loud and deliberate** — not "impossible to bypass."
+- **WebFetch is not restricted by destination.** That's a deliberate trade (see ADR-0001): the agent
+  can fetch any URL, so it can also exfil project source. Exfil is bounded by *secret confinement*,
+  not the network. If that's too loose for you, tighten `claude`'s egress (see ADR-0001's note).
+
+## Customizing (central, not per-employee)
+
+These live in the image so the policy stays consistent across the fleet — edit and rebuild/publish:
+
+- **Registry allowlist** (incl. your internal registry): `image/proxy/registry-filter`
+- **Toolchain**: `image/Dockerfile`
+- **Allowed MCP servers** (default: context7 only): `image/mcp/config.json`
+- **Image location**: set `IMAGE` in `bin/cc-sandbox` to your `ghcr.io/<org>/...:stable`
+
+Publishing is automated by [`.github/workflows/publish-image.yml`](./.github/workflows/publish-image.yml)
+(pushes `:stable` to GHCR on changes to `image/`).
+
+## Local development
+
+```bash
+docker build -t cc-sandbox:dev ./image
+CC_SANDBOX_IMAGE=cc-sandbox:dev cc-sandbox     # use your local build instead of GHCR
+```
+
+## Security properties (validated)
+
+The model is verified end-to-end against the built image (`image/` + Wrapper):
+
+- agent has full internet; commands are blocked from all direct egress
+- commands can reach allowlisted registries (npm → `200`) but not arbitrary hosts (`example.com` → refused)
+- the agent cannot modify the firewall or `sudo` to root; it can only drop to `runner`
+- commands run as `runner` yet can still write the project (via ACLs)
+- the injected OAuth token is not even readable by `runner` commands

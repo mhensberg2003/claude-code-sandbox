@@ -1,0 +1,13 @@
+# cc-sandbox sudo policy — the ONLY privilege transition in the box.
+#
+# `claude` may become `runner` (a STRICT privilege DROP) and nothing else. There is no
+# claude->root path, so even a fully prompt-injected agent cannot regain root or edit the firewall.
+# This narrow allowance replaces --security-opt=no-new-privileges (which would neuter the setuid
+# path this drop relies on). See ADR-0002 / CONTEXT.md hardening notes.
+
+Defaults:claude !requiretty
+Defaults:claude !authenticate
+Defaults:claude env_keep += "HTTP_PROXY HTTPS_PROXY http_proxy https_proxy NO_PROXY no_proxy"
+
+# entrypoint (root) uses sudo to set claude's git identity during setup; harmless and pre-handoff.
+claude ALL=(runner) NOPASSWD:SETENV: ALL

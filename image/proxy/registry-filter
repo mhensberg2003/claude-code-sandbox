@@ -1,0 +1,35 @@
+# Registry allowlist — hostnames `runner` (commands) may reach via the proxy.
+# Extended regex, matched against the destination host. Keep this SHORT and curated:
+# every host here is also a permitted command-egress destination.
+#
+# Add your company's internal registry here (centrally, reviewed once) and rebuild the image.
+
+# npm / yarn / pnpm
+(^|\.)npmjs\.org$
+(^|\.)yarnpkg\.com$
+(^|\.)npmjs\.com$
+
+# Python (PyPI)
+(^|\.)pypi\.org$
+(^|\.)pythonhosted\.org$
+
+# Go modules
+(^|\.)golang\.org$
+(^|\.)proxy\.golang\.org$
+(^|\.)sum\.golang\.org$
+
+# Rust (crates.io)
+(^|\.)crates\.io$
+
+# Java / Maven Central
+(^|\.)maven\.org$
+
+# Source deps frequently pulled by package managers
+(^|\.)github\.com$
+(^|\.)githubusercontent\.com$
+(^|\.)codeload\.github\.com$
+
+# Toolchain mirrors (Node release downloads, Debian/Ubuntu apt)
+(^|\.)nodejs\.org$
+(^|\.)debian\.org$
+(^|\.)ubuntu\.com$
