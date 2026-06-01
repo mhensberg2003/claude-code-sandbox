@@ -35,6 +35,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code \
     && npm cache clean --force
 
+# --- pnpm (baked alongside npm; the agent picks per-project). Its store lives in runner's HOME
+#     (/home/runner = the per-project cache volume), so installs persist across runs. ---
+RUN npm install -g pnpm \
+    && npm cache clean --force
+
 # --- Rust (rustup, minimal profile) installed into a shared location ---
 ENV RUSTUP_HOME=/opt/rust/rustup \
     CARGO_HOME=/opt/rust/cargo \
