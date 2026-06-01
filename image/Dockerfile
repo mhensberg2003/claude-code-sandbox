@@ -78,7 +78,8 @@ RUN find / -xdev -type f -perm /6000 -exec chmod a-s {} + 2>/dev/null || true; \
     chmod u+s /usr/bin/sudo
 
 # Claude's home holds session state (~/.claude). Writable; ephemeral unless a volume is mounted.
-WORKDIR /workspace/project
+# Real workdir is set at runtime (-w /workspace/<project-name>); this is just the parent default.
+WORKDIR /workspace
 
 # tini as PID 1 for proper signal/zombie handling; entrypoint runs as root then drops to claude.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/sbin/cc-entrypoint"]

@@ -105,6 +105,13 @@ PROJECT="$PWD"
 [[ -d "$PROJECT" ]] || die "current directory is not accessible"
 case "$PROJECT" in /|"$HOME") die "refusing to sandbox '$PROJECT' — cd into a project directory first" ;; esac
 
+# Mount the project at /workspace/<name> (name = the host dir's basename) so the in-box prompt and
+# paths reflect the real project, not a generic "project". Sanitize to a safe path component:
+# keep [A-Za-z0-9._-], collapse anything else to '-', and fall back to "project" if empty.
+PROJECT_NAME="$(basename "$PROJECT" | tr -c 'A-Za-z0-9._-' '-' | sed 's/^-*//; s/-*$//')"
+[[ -n "$PROJECT_NAME" ]] || PROJECT_NAME="project"
+BOX_PATH="/workspace/$PROJECT_NAME"
+
 # ----------------------------------------------------------------------------- export sessions to host
 if [[ "$EXPORT" == 1 ]]; then
     vol="cc-session-$(hash_id "$PROJECT")"
@@ -116,11 +123,12 @@ if [[ "$EXPORT" == 1 ]]; then
     # `claude --resume` on the host keys and resolves them correctly. Runs as the host user so
     # the exported files are owned by you, not root.
     n="$(docker run --rm --user "$(id -u):$(id -g)" -v "$vol:/v:ro" -v "$dest:/out" \
-            -e DST="$PROJECT" alpine sh -c '
+            -e SRC="$BOX_PATH" -e DST="$PROJECT" alpine sh -c '
               c=0
-              for f in /v/.claude/projects/-workspace-project/*.jsonl; do
+              # The volume holds exactly this project, so glob its slug dir (robust to the box name).
+              for f in /v/.claude/projects/*/*.jsonl; do
                 [ -e "$f" ] || continue
-                sed "s#/workspace/project#${DST}#g" "$f" > "/out/$(basename "$f")" && c=$((c+1))
+                sed "s#${SRC}#${DST}#g" "$f" > "/out/$(basename "$f")" && c=$((c+1))
               done
               printf %s "$c"')"
     [[ "${n:-0}" -gt 0 ]] || die "no session transcripts found in the volume"
@@ -225,9 +233,10 @@ ARGS+=(
       --security-opt label=disable
       -e "HOST_UID=$(id -u)" -e "HOST_GID=$(id -g)"
       -e "GIT_AUTHOR_NAME=${GIT_NAME}" -e "GIT_AUTHOR_EMAIL=${GIT_EMAIL}"
-      -v "${PROJECT}:/workspace/project"
+      -e "CC_PROJECT_PATH=${BOX_PATH}"
+      -v "${PROJECT}:${BOX_PATH}"
       -v "${CACHE_VOL}:/home/runner"
-      -w /workspace/project)
+      -w "${BOX_PATH}")
 
 for c in "${CAPS[@]}";  do ARGS+=(--cap-add "$c"); done
 
