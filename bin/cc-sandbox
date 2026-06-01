@@ -5,11 +5,12 @@
 # cannot set itself (cap-drop, mounts, network, --rm, ports) and does the surgical OAuth extraction.
 # It is intentionally small and readable — audit it. See CONTEXT.md and docs/adr/.
 #
-# Usage:  cd <project> && cc-sandbox [--resume] [--fresh] [--ephemeral] [--port N]... [--unsafe] [-- <claude args>]
+# Usage:  cd <project> && cc-sandbox [--resume] [--fresh] [--ephemeral] [--port N]... [--no-config] [--unsafe] [-- <claude args>]
 #   --resume     pick one of this project's past sessions to resume (native Claude picker)
 #   --fresh      wipe this project's cached deps and saved sessions first
 #   --ephemeral  no on-disk session state (not resumable)
 #   --port N     also forward an extra dev-server port (repeatable)
+#   --no-config  pristine box: do NOT bring your host skills / global CLAUDE.md / rules
 #   --update     update the Wrapper + pull the latest image, then exit
 #   --export-session   copy this project's sandbox sessions to the host so `claude --resume`
 #                      (outside the sandbox) can continue them, then exit
@@ -33,17 +34,18 @@ have() { command -v "$1" >/dev/null 2>&1; }
 hash_id() { printf '%s' "$1" | { have sha256sum && sha256sum || shasum -a 256; } | cut -c1-12; }
 
 # ----------------------------------------------------------------------------- arg parsing
-RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXPORT=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
+RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXPORT=0; NO_CONFIG=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --resume|--continue) RESUME=1 ;;
         --fresh)             FRESH=1 ;;
         --ephemeral)         EPHEMERAL=1 ;;
+        --no-config)         NO_CONFIG=1 ;;
         --update)            UPDATE=1 ;;
         --export-session)    EXPORT=1 ;;
         --unsafe)            UNSAFE=1 ;;
         --port)              shift; [[ "${1:-}" =~ ^[0-9]+$ ]] || die "--port needs a number"; EXTRA_PORTS+=("$1") ;;
-        --help|-h)           sed -n '2,12p' "$0"; exit 0 ;;
+        --help|-h)           sed -n '2,18p' "$0"; exit 0 ;;
         --)                  shift; CLAUDE_ARGS+=("$@"); break ;;
         *)                   CLAUDE_ARGS+=("$1") ;;
     esac
@@ -166,6 +168,23 @@ if cfg="$(extract_config_markers)" && [[ -n "$cfg" ]]; then
     chmod 600 "$SECRET_DIR/claude-config.json"
 fi
 
+# ----------------------------------------------------------------------------- user skills + global config
+# Stage the user's OWN skills and global CLAUDE.md / rules so they carry into the box. These are
+# authored content (not secrets), and skill scripts run INSIDE the sandbox — the safe place for them.
+# Copied (never bind-mounted) with `cp -L` so symlinked skills (e.g. ~/.agents/skills/*) are
+# dereferenced and never dangle in-box. Skip entirely with --no-config or CC_SANDBOX_NO_CONFIG=1.
+stage_user_config() {
+    local stage="$SECRET_DIR/user-claude" staged=0
+    mkdir -p "$stage"
+    [[ -d "$HOME/.claude/skills" ]] && cp -rL "$HOME/.claude/skills" "$stage/skills"     2>/dev/null && staged=1
+    [[ -f "$HOME/.claude/CLAUDE.md" ]] && cp -L "$HOME/.claude/CLAUDE.md" "$stage/CLAUDE.md" 2>/dev/null && staged=1
+    [[ -d "$HOME/.claude/rules"  ]] && cp -rL "$HOME/.claude/rules"  "$stage/rules"      2>/dev/null && staged=1
+    [[ "$staged" == 1 ]] && chmod -R u+rwX "$stage" || rmdir "$stage" 2>/dev/null || true
+}
+if [[ "$NO_CONFIG" == 0 && -z "${CC_SANDBOX_NO_CONFIG:-}" ]]; then
+    stage_user_config
+fi
+
 # ----------------------------------------------------------------------------- git identity (name/email only)
 GIT_NAME="$(git config --get user.name  2>/dev/null || true)"
 GIT_EMAIL="$(git config --get user.email 2>/dev/null || true)"
@@ -220,6 +239,10 @@ fi
     ARGS+=(-v "${SECRET_DIR}/credentials.json:/run/cc-secret/credentials.json:ro")
 [[ -f "$SECRET_DIR/claude-config.json" ]] && \
     ARGS+=(-v "${SECRET_DIR}/claude-config.json:/run/cc-secret/claude-config.json:ro")
+
+# User-authored skills + global CLAUDE.md/rules (read-only); entrypoint copies them into claude's home.
+[[ -d "$SECRET_DIR/user-claude" ]] && \
+    ARGS+=(-v "${SECRET_DIR}/user-claude:/run/cc-secret/user-claude:ro")
 
 # Port forwarding, bound to localhost only.
 for p in "${COMMON_PORTS[@]}" "${EXTRA_PORTS[@]}"; do ARGS+=(-p "127.0.0.1:${p}:${p}"); done

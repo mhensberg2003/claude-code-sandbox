@@ -37,6 +37,7 @@ credentials, other projects, MCP-connected accounts, or run autonomous command-n
 | **Commands** (every Bash command, uid `runner`) | **No network except a registry allowlist** (npm/PyPI/Go/crates/…) via a no-log CONNECT proxy |
 | **Filesystem** | Only the current project is mounted (read-write). No `$HOME`, no host env, no SSH/cloud creds |
 | **Auth** | Only your `claudeAiOauth` token is injected (never `mcpOAuth` or anything else) |
+| **Skills & global config** | Your `~/.claude/skills`, `CLAUDE.md`, and `rules/` are copied in read-only (symlinks dereferenced) so the agent behaves like it does on the host. Opt out with `--no-config`. **Not** brought: plugins, MCP servers, subagents, history |
 | **Firewall** | Per-uid `nftables`, set once by root then made immutable (agent can't disable it) |
 | **Hardening** | read-only rootfs, dropped caps, pids/memory limits, no Docker socket, ephemeral container |
 | **Git** | Agent commits (name/email injected); **never** pushes — you push from the host after review |
@@ -65,6 +66,7 @@ cc-sandbox                # launch in the current project (new conversation; ses
 cc-sandbox --resume       # pick a past session for this project to resume (native picker)
 cc-sandbox --fresh        # wipe this project's cached deps AND saved sessions first
 cc-sandbox --ephemeral    # no on-disk session state (not resumable)
+cc-sandbox --no-config    # pristine box: skip your host skills / global CLAUDE.md / rules
 cc-sandbox --port 4321    # also forward an extra dev-server port (common ports are auto-forwarded)
 cc-sandbox --update       # update the Wrapper + pull the latest image, then exit
 cc-sandbox --export-session  # copy this project's sandbox sessions to the host, then `claude --resume`

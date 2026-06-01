@@ -54,6 +54,16 @@ chown "$HOST_UID:$HOST_GID" /home/claude/.claude.json && chmod 600 /home/claude/
 # --- 6. Curated MCP config (context7 only); never the Host's MCP servers ------------------------
 install -o claude -g claude -m 0600 /etc/cc-sandbox/mcp.json /home/claude/.claude/.mcp.json 2>/dev/null || true
 
+# --- 6b. User-authored skills + global CLAUDE.md/rules (copied read-only from host, opt-out) -----
+# The Wrapper staged these (symlinks already dereferenced). Copy into claude's home so the agent
+# has the same skills / global instructions it does on the host. Owned by claude, writable in-box
+# but never touching the host originals.
+if [[ -d /run/cc-secret/user-claude ]]; then
+    cp -r /run/cc-secret/user-claude/. /home/claude/.claude/ 2>/dev/null || true
+    chown -R "$HOST_UID:$HOST_GID" /home/claude/.claude 2>/dev/null || true
+    log "seeded host skills + global CLAUDE.md/rules"
+fi
+
 # --- 7. Git identity (name/email only; never credentials) --------------------------------------
 [[ -n "${GIT_AUTHOR_NAME:-}"  ]] && gosu claude git config --global user.name  "${GIT_AUTHOR_NAME}"  || true
 [[ -n "${GIT_AUTHOR_EMAIL:-}" ]] && gosu claude git config --global user.email "${GIT_AUTHOR_EMAIL}" || true
