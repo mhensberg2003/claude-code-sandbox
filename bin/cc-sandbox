@@ -2,14 +2,13 @@
 # cc-sandbox — launch Claude Code (--dangerously-skip-permissions) inside the Sandbox.
 #
 # This script is co-load-bearing with the image: it applies the EXTERNAL run policy the image
-# cannot set itself (cap-drop, mounts, network, --rm, ports) and does the surgical OAuth extraction.
+# cannot set itself (cap-drop, mounts, network, --rm) and does the surgical OAuth extraction.
 # It is intentionally small and readable — audit it. See CONTEXT.md and docs/adr/.
 #
-# Usage:  cd <project> && cc-sandbox [--resume] [--fresh] [--ephemeral] [--port N]... [--no-config] [--unsafe] [-- <claude args>]
+# Usage:  cd <project> && cc-sandbox [--resume] [--fresh] [--ephemeral] [--no-config] [--unsafe] [-- <claude args>]
 #   --resume     pick one of this project's past sessions to resume (native Claude picker)
 #   --fresh      wipe this project's cached deps and saved sessions first
 #   --ephemeral  no on-disk session state (not resumable)
-#   --port N     also forward an extra dev-server port (repeatable)
 #   --no-config  pristine box: do NOT bring your host skills / global CLAUDE.md / rules
 #   --update     update the Wrapper + pull the latest image, then exit
 #   --export-session   copy this project's sandbox sessions to the host so `claude --resume`
@@ -21,8 +20,9 @@ set -euo pipefail
 IMAGE="${CC_SANDBOX_IMAGE:-ghcr.io/mhensberg2003/claude-code-sandbox/cc-sandbox:stable}"
 MEMORY="${CC_SANDBOX_MEMORY:-8g}"
 PIDS_LIMIT="${CC_SANDBOX_PIDS:-512}"
-# Dev-server ports auto-forwarded to 127.0.0.1 on the Host (inbound-from-localhost is not exfil).
-COMMON_PORTS=(3000 3001 4200 5000 5173 5174 8000 8080 8081 9000)
+# NOTE: no host port forwarding. The box publishes NO ports, so it never occupies host ports your
+# own dev servers use. Run dev servers on the Host; if you need to reach an in-box server, publish
+# it yourself with a one-off `docker run -p ...` or use `--unsafe`.
 # Minimal caps the root entrypoint needs (firewall, uid-switch, setup chowns/ACLs). The agent runs
 # as non-root `claude` with NO ambient caps, so it cannot use any of these directly.
 CAPS=(NET_ADMIN SETUID SETGID CHOWN DAC_OVERRIDE FOWNER FSETID SETPCAP AUDIT_WRITE)
@@ -34,7 +34,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 hash_id() { printf '%s' "$1" | { have sha256sum && sha256sum || shasum -a 256; } | cut -c1-12; }
 
 # ----------------------------------------------------------------------------- arg parsing
-RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXPORT=0; NO_CONFIG=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
+RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXPORT=0; NO_CONFIG=0; CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --resume|--continue) RESUME=1 ;;
@@ -44,8 +44,7 @@ while [[ $# -gt 0 ]]; do
         --update)            UPDATE=1 ;;
         --export-session)    EXPORT=1 ;;
         --unsafe)            UNSAFE=1 ;;
-        --port)              shift; [[ "${1:-}" =~ ^[0-9]+$ ]] || die "--port needs a number"; EXTRA_PORTS+=("$1") ;;
-        --help|-h)           sed -n '2,18p' "$0"; exit 0 ;;
+        --help|-h)           sed -n '2,16p' "$0"; exit 0 ;;
         --)                  shift; CLAUDE_ARGS+=("$@"); break ;;
         *)                   CLAUDE_ARGS+=("$1") ;;
     esac
@@ -258,8 +257,7 @@ fi
 [[ -d "$SECRET_DIR/user-claude" ]] && \
     ARGS+=(-v "${SECRET_DIR}/user-claude:/run/cc-secret/user-claude:ro")
 
-# Port forwarding, bound to localhost only.
-for p in "${COMMON_PORTS[@]}" "${EXTRA_PORTS[@]}"; do ARGS+=(-p "127.0.0.1:${p}:${p}"); done
+# No host port forwarding: the box publishes nothing, so it can never occupy host ports.
 
 ARGS+=("$IMAGE" "${CLAUDE_ARGS[@]}")
 

@@ -67,7 +67,6 @@ cc-sandbox --resume       # pick a past session for this project to resume (nati
 cc-sandbox --fresh        # wipe this project's cached deps AND saved sessions first
 cc-sandbox --ephemeral    # no on-disk session state (not resumable)
 cc-sandbox --no-config    # pristine box: skip your host skills / global CLAUDE.md / rules
-cc-sandbox --port 4321    # also forward an extra dev-server port (common ports are auto-forwarded)
 cc-sandbox --update       # update the Wrapper + pull the latest image, then exit
 cc-sandbox --export-session  # copy this project's sandbox sessions to the host, then `claude --resume`
 cc-sandbox --unsafe       # ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
@@ -80,8 +79,9 @@ Wrapper script itself, run `cc-sandbox --update` (or re-run the installer).
 Sessions are saved per-project in a **local** Docker volume so `--resume` works; nothing leaves your
 machine. Use `--ephemeral` if you want zero session state on disk.
 
-Common dev ports (3000, 5173, 8080, …) are auto-forwarded to `127.0.0.1` so you can open the app in
-your host browser.
+The box publishes **no host ports**, so it never occupies ports (3000, 5173, …) your own host dev
+servers use. Run dev servers on the host as usual. If you need to reach a server running *inside* the
+box, publish it yourself with a one-off `docker run -p ...` (or use `--unsafe`).
 
 ## Boundaries (read this)
 

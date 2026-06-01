@@ -109,8 +109,8 @@ The Sandbox ships its **own** MCP config (never the Host's `~/.claude.json`), co
 **Toolchain: one batteries-included image.**
 The image is the only toolchain (Host not mounted), so `:stable` bakes in node, python, go, rust, git, build-essential, ripgrep, and common CLIs. Chosen over slim per-stack variants so it "just works" across any project for the fleet. Future opt-in extension: a project-level `Dockerfile.sandbox` that `FROM`s the base (not v1).
 
-**Dev servers: common ports auto-forwarded.**
-A curated set of common dev ports (e.g. 3000/3001/5173/8080/8000/4200/5000) is published container→Host automatically, each bound to **`127.0.0.1`** on the Host (never `0.0.0.0`). Inbound-from-localhost is not an exfil path, so this is safe. `runner` can bind/listen normally (the firewall filters egress, not listening).
+**Dev servers: no host port forwarding.**
+The box publishes **no** ports to the Host. An earlier design auto-forwarded a curated set of common dev ports (3000/3001/5173/8080/…) bound to `127.0.0.1`, but that **pre-reserved those ports on the Host for the whole session even when nothing in the box was listening**, colliding with the employee's own Host dev servers (and failing to launch if a port was already taken). Since employees run dev servers on the Host and use the box for editing/committing, the forwarding was net-negative and removed. `runner` can still bind/listen *inside* the box normally; to reach an in-box server, publish it with a one-off `docker run -p ...`. Inbound-from-localhost was never an exfil path, so nothing about the security posture changes.
 
 ## Relationships
 
