@@ -66,9 +66,13 @@ cc-sandbox --resume       # pick a past session for this project to resume (nati
 cc-sandbox --fresh        # wipe this project's cached deps AND saved sessions first
 cc-sandbox --ephemeral    # no on-disk session state (not resumable)
 cc-sandbox --port 4321    # also forward an extra dev-server port (common ports are auto-forwarded)
+cc-sandbox --update       # update the Wrapper + pull the latest image, then exit
 cc-sandbox --unsafe       # ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
 cc-sandbox -- -p "..."    # pass arguments through to claude
 ```
+
+**Updating:** the policy image auto-updates on every run (`--pull=always`). To also refresh the
+Wrapper script itself, run `cc-sandbox --update` (or re-run the installer).
 
 Sessions are saved per-project in a **local** Docker volume so `--resume` works; nothing leaves your
 machine. Use `--ephemeral` if you want zero session state on disk.
