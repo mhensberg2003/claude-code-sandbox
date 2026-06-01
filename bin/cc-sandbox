@@ -68,7 +68,21 @@ if [[ "$UPDATE" == 1 ]]; then
     fi
     if have docker && docker info >/dev/null 2>&1 && [[ "$IMAGE" == */* ]]; then
         echo "cc-sandbox: pulling latest image (~1.8GB first time; shows progress below)"
-        docker pull "$IMAGE" && echo "  image up to date" || warn "image pull failed"
+        if docker pull "$IMAGE"; then
+            echo "  image up to date"
+            # A new pull retags :stable and leaves the previous image untagged. Prune ONLY the
+            # now-orphaned images of THIS repo (scoped by reference + dangling) so they don't pile
+            # up — never the live tag, other repos, or unrelated dangling images elsewhere.
+            orphans="$(docker images "${IMAGE%:*}" --filter dangling=true -q 2>/dev/null | sort -u)"
+            if [[ -n "$orphans" ]]; then
+                n="$(printf '%s\n' "$orphans" | wc -l | tr -d ' ')"
+                printf '%s\n' "$orphans" | xargs docker rmi >/dev/null 2>&1 \
+                    && echo "  pruned $n orphaned image(s)" \
+                    || echo "  note: some orphaned images are still in use; left in place"
+            fi
+        else
+            warn "image pull failed"
+        fi
     fi
     echo "cc-sandbox: done."
     exit 0
