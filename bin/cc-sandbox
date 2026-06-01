@@ -91,6 +91,22 @@ else
     warn "(continuing; Claude Code will prompt for auth inside the box)"
 fi
 
+# Minimal onboarding/account markers so Claude knows login is already done. NOT the whole
+# ~/.claude.json (which holds project history, MCP configs, etc.) — just these identity fields.
+extract_config_markers() {
+    local keys='("userID","hasCompletedOnboarding","lastOnboardingVersion","oauthAccount")'
+    [[ -f "$HOME/.claude.json" ]] || return 1
+    if have jq; then
+        jq '{userID, hasCompletedOnboarding, lastOnboardingVersion, oauthAccount}' "$HOME/.claude.json" 2>/dev/null
+    elif have python3; then
+        python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({k:d.get(k) for k in $keys}))" "$HOME/.claude.json" 2>/dev/null
+    fi
+}
+if cfg="$(extract_config_markers)" && [[ -n "$cfg" ]]; then
+    printf '%s' "$cfg" > "$SECRET_DIR/claude-config.json"
+    chmod 600 "$SECRET_DIR/claude-config.json"
+fi
+
 # ----------------------------------------------------------------------------- git identity (name/email only)
 GIT_NAME="$(git config --get user.name  2>/dev/null || true)"
 GIT_EMAIL="$(git config --get user.email 2>/dev/null || true)"
@@ -138,9 +154,11 @@ else
     ARGS+=(--tmpfs /home/claude:exec,mode=0700)
 fi
 
-# OAuth token (read-only); entrypoint copies it into the ephemeral home.
+# OAuth token + onboarding markers (read-only); entrypoint copies them into the ephemeral home.
 [[ -f "$SECRET_DIR/credentials.json" ]] && \
     ARGS+=(-v "${SECRET_DIR}/credentials.json:/run/cc-secret/credentials.json:ro")
+[[ -f "$SECRET_DIR/claude-config.json" ]] && \
+    ARGS+=(-v "${SECRET_DIR}/claude-config.json:/run/cc-secret/claude-config.json:ro")
 
 # Port forwarding, bound to localhost only.
 for p in "${COMMON_PORTS[@]}" "${EXTRA_PORTS[@]}"; do ARGS+=(-p "127.0.0.1:${p}:${p}"); done

@@ -39,6 +39,11 @@ else
     log "WARNING: no credentials injected — Claude Code will be unauthenticated."
 fi
 
+# --- 5b. Onboarding/account markers so Claude skips first-run login (token alone isn't enough) --
+if [[ -f /run/cc-secret/claude-config.json ]]; then
+    install -o claude -g claude -m 0600 /run/cc-secret/claude-config.json /home/claude/.claude.json
+fi
+
 # --- 6. Curated MCP config (context7 only); never the Host's MCP servers ------------------------
 install -o claude -g claude -m 0600 /etc/cc-sandbox/mcp.json /home/claude/.claude/.mcp.json 2>/dev/null || true
 

@@ -56,7 +56,8 @@ The Sandbox bind-mounts only the **Project** (read-write) and nothing else from 
 **Authentication: 8a-surgical (OAuth token injected into the box).**
 Employees authenticate via Claude Code OAuth (personal Claude subscription), not an API key. The credential cannot be hidden from the agent, because the agent's Read/Bash tools run *as Claude itself* — anything Claude can read to authenticate, the agent can read to steal. A key-off-box auth proxy was rejected: for OAuth it would require a TLS-terminating MITM of `api.anthropic.com` (to inject the Bearer header and handle token refresh), exposing all prompt/response traffic — worse than the problem.
 - The Wrapper extracts **only** `claudeAiOauth` from the Host credential store (`~/.claude/.credentials.json` on WSL, Keychain on macOS) and writes it into the container's own `~/.claude/.credentials.json`.
-- Explicitly excluded: `mcpOAuth` (MCP server tokens — Gmail, Linear, etc.), `~/.claude.json`, and the rest of Host `~/.claude`.
+- It also injects four **onboarding/account markers** from Host `~/.claude.json` (`userID`, `hasCompletedOnboarding`, `lastOnboardingVersion`, `oauthAccount`) into a minimal container `~/.claude.json` — required because Claude Code runs first-time login if these are absent, *even with a valid token*. These are low-sensitivity account identifiers, not secrets.
+- Explicitly excluded: `mcpOAuth` (MCP server tokens — Gmail, Linear, etc.), the **rest** of `~/.claude.json` (project history, MCP configs), and the rest of Host `~/.claude`.
 - **Accepted residual risk:** an injected agent can exfil this token. Blast radius is bounded to the individual's own Claude subscription (quota abuse / login reuse), never a shared company key or their MCP-connected accounts. Rotation = re-run `claude login`.
 
 **Command interposition: `CLAUDE_CODE_SHELL_PREFIX`.**
