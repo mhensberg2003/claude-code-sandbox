@@ -45,6 +45,10 @@ install -o claude -g claude -m 0600 /etc/cc-sandbox/mcp.json /home/claude/.claud
 # --- 7. Git identity (name/email only; never credentials) --------------------------------------
 [[ -n "${GIT_AUTHOR_NAME:-}"  ]] && gosu claude git config --global user.name  "${GIT_AUTHOR_NAME}"  || true
 [[ -n "${GIT_AUTHOR_EMAIL:-}" ]] && gosu claude git config --global user.email "${GIT_AUTHOR_EMAIL}" || true
+# The project is owned by `claude` but commands run as `runner`; trust it for both so git doesn't
+# trip "dubious ownership" on every command.
+gosu claude         git config --global --add safe.directory /workspace/project || true
+sudo -n -u runner   git config --global --add safe.directory /workspace/project || true
 
 # --- 8. Grant `runner` write access to the project WITHOUT changing ownership -------------------
 # Commands run as runner but the project is owned by the host uid (= claude). ACLs let runner
