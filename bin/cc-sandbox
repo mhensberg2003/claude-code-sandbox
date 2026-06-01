@@ -5,7 +5,12 @@
 # cannot set itself (cap-drop, mounts, network, --rm, ports) and does the surgical OAuth extraction.
 # It is intentionally small and readable — audit it. See CONTEXT.md and docs/adr/.
 #
-# Usage:  cd <project> && cc-sandbox [--resume] [--fresh] [--port N]... [--unsafe] [-- <claude args>]
+# Usage:  cd <project> && cc-sandbox [--resume] [--fresh] [--ephemeral] [--port N]... [--unsafe] [-- <claude args>]
+#   --resume     pick one of this project's past sessions to resume (native Claude picker)
+#   --fresh      wipe this project's cached deps and saved sessions first
+#   --ephemeral  no on-disk session state (not resumable)
+#   --port N     also forward an extra dev-server port (repeatable)
+#   --unsafe     ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
 set -euo pipefail
 
 # ----------------------------------------------------------------------------- config
@@ -24,11 +29,12 @@ warn() { echo "cc-sandbox: $*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # ----------------------------------------------------------------------------- arg parsing
-RESUME=0; FRESH=0; UNSAFE=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
+RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --resume|--continue) RESUME=1 ;;
         --fresh)             FRESH=1 ;;
+        --ephemeral)         EPHEMERAL=1 ;;
         --unsafe)            UNSAFE=1 ;;
         --port)              shift; [[ "${1:-}" =~ ^[0-9]+$ ]] || die "--port needs a number"; EXTRA_PORTS+=("$1") ;;
         --help|-h)           sed -n '2,12p' "$0"; exit 0 ;;
@@ -146,12 +152,15 @@ if [[ -z "${CC_SANDBOX_WRITABLE_ROOT:-}" ]]; then
     ARGS+=(--read-only --tmpfs /tmp --tmpfs /run --tmpfs /var/tmp)
 fi
 
-# Session home: ephemeral tmpfs by default; persistent volume when resuming.
-if [[ "$RESUME" == 1 ]]; then
-    ARGS+=(-v "${SESSION_VOL}:/home/claude")
-    CLAUDE_ARGS=(--continue "${CLAUDE_ARGS[@]}")
-else
+# Session home. Persisted per-project by default so `--resume` can continue your last
+# conversation (transcripts live in a LOCAL docker volume; wipe with --fresh). Use --ephemeral
+# for zero on-disk session state (tmpfs), at the cost of never being resumable.
+if [[ "$EPHEMERAL" == 1 ]]; then
     ARGS+=(--tmpfs /home/claude:exec,mode=0700)
+else
+    ARGS+=(-v "${SESSION_VOL}:/home/claude")
+    # Native session picker: lists this project's past sessions to choose from.
+    [[ "$RESUME" == 1 ]] && CLAUDE_ARGS=(--resume "${CLAUDE_ARGS[@]}")
 fi
 
 # OAuth token + onboarding markers (read-only); entrypoint copies them into the ephemeral home.

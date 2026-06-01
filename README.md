@@ -61,13 +61,17 @@ First time: run `claude login` on your host once so the Wrapper can extract your
 ## Usage
 
 ```bash
-cc-sandbox                # launch in the current project (fresh session)
-cc-sandbox --resume       # resume the previous session for this project
-cc-sandbox --fresh        # wipe this project's cached dependencies first
+cc-sandbox                # launch in the current project (new conversation; session is saved)
+cc-sandbox --resume       # pick a past session for this project to resume (native picker)
+cc-sandbox --fresh        # wipe this project's cached deps AND saved sessions first
+cc-sandbox --ephemeral    # no on-disk session state (not resumable)
 cc-sandbox --port 4321    # also forward an extra dev-server port (common ports are auto-forwarded)
 cc-sandbox --unsafe       # ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
 cc-sandbox -- -p "..."    # pass arguments through to claude
 ```
+
+Sessions are saved per-project in a **local** Docker volume so `--resume` works; nothing leaves your
+machine. Use `--ephemeral` if you want zero session state on disk.
 
 Common dev ports (3000, 5173, 8080, …) are auto-forwarded to `127.0.0.1` so you can open the app in
 your host browser.
