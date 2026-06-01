@@ -10,6 +10,7 @@
 #   --fresh      wipe this project's cached deps and saved sessions first
 #   --ephemeral  no on-disk session state (not resumable)
 #   --port N     also forward an extra dev-server port (repeatable)
+#   --update     update the Wrapper + pull the latest image, then exit
 #   --unsafe     ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
 set -euo pipefail
 
@@ -29,12 +30,13 @@ warn() { echo "cc-sandbox: $*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
 # ----------------------------------------------------------------------------- arg parsing
-RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
+RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --resume|--continue) RESUME=1 ;;
         --fresh)             FRESH=1 ;;
         --ephemeral)         EPHEMERAL=1 ;;
+        --update)            UPDATE=1 ;;
         --unsafe)            UNSAFE=1 ;;
         --port)              shift; [[ "${1:-}" =~ ^[0-9]+$ ]] || die "--port needs a number"; EXTRA_PORTS+=("$1") ;;
         --help|-h)           sed -n '2,12p' "$0"; exit 0 ;;
@@ -43,6 +45,28 @@ while [[ $# -gt 0 ]]; do
     esac
     shift || true
 done
+
+# ----------------------------------------------------------------------------- self-update
+if [[ "$UPDATE" == 1 ]]; then
+    REPO="${CC_SANDBOX_REPO:-mhensberg2003/claude-code-sandbox}"
+    REF="${CC_SANDBOX_REF:-main}"
+    SELF="$(command -v cc-sandbox 2>/dev/null || true)"; [[ -n "$SELF" ]] || SELF="$0"
+    [[ -w "$SELF" ]] || die "cannot write $SELF (no permission). Re-run the installer manually."
+    url="https://raw.githubusercontent.com/${REPO}/${REF}/bin/cc-sandbox"
+    tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
+    echo "cc-sandbox: updating Wrapper from $url"
+    if curl -fsSL "$url" -o "$tmp" && [[ -s "$tmp" ]] && head -1 "$tmp" | grep -q '^#!'; then
+        cat "$tmp" > "$SELF"; echo "  Wrapper updated -> $SELF"
+    else
+        die "failed to download an updated Wrapper (check network / repo)."
+    fi
+    if have docker && docker info >/dev/null 2>&1 && [[ "$IMAGE" == */* ]]; then
+        echo "cc-sandbox: pulling latest image $IMAGE"
+        docker pull "$IMAGE" >/dev/null && echo "  image up to date" || warn "image pull failed"
+    fi
+    echo "cc-sandbox: done."
+    exit 0
+fi
 
 # ----------------------------------------------------------------------------- escape hatch
 if [[ "$UNSAFE" == 1 ]]; then
