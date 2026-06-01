@@ -67,6 +67,7 @@ cc-sandbox --fresh        # wipe this project's cached deps AND saved sessions f
 cc-sandbox --ephemeral    # no on-disk session state (not resumable)
 cc-sandbox --port 4321    # also forward an extra dev-server port (common ports are auto-forwarded)
 cc-sandbox --update       # update the Wrapper + pull the latest image, then exit
+cc-sandbox --export-session  # copy this project's sandbox sessions to the host, then `claude --resume`
 cc-sandbox --unsafe       # ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
 cc-sandbox -- -p "..."    # pass arguments through to claude
 ```

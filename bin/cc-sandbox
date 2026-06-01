@@ -11,6 +11,8 @@
 #   --ephemeral  no on-disk session state (not resumable)
 #   --port N     also forward an extra dev-server port (repeatable)
 #   --update     update the Wrapper + pull the latest image, then exit
+#   --export-session   copy this project's sandbox sessions to the host so `claude --resume`
+#                      (outside the sandbox) can continue them, then exit
 #   --unsafe     ESCAPE HATCH: plain `claude --dangerously-skip-permissions`, NO sandbox
 set -euo pipefail
 
@@ -28,15 +30,17 @@ CAPS=(NET_ADMIN SETUID SETGID CHOWN DAC_OVERRIDE FOWNER FSETID SETPCAP AUDIT_WRI
 die()  { echo "cc-sandbox: $*" >&2; exit 1; }
 warn() { echo "cc-sandbox: $*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
+hash_id() { printf '%s' "$1" | { have sha256sum && sha256sum || shasum -a 256; } | cut -c1-12; }
 
 # ----------------------------------------------------------------------------- arg parsing
-RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
+RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXPORT=0; EXTRA_PORTS=(); CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --resume|--continue) RESUME=1 ;;
         --fresh)             FRESH=1 ;;
         --ephemeral)         EPHEMERAL=1 ;;
         --update)            UPDATE=1 ;;
+        --export-session)    EXPORT=1 ;;
         --unsafe)            UNSAFE=1 ;;
         --port)              shift; [[ "${1:-}" =~ ^[0-9]+$ ]] || die "--port needs a number"; EXTRA_PORTS+=("$1") ;;
         --help|-h)           sed -n '2,12p' "$0"; exit 0 ;;
@@ -85,6 +89,31 @@ docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start D
 PROJECT="$PWD"
 [[ -d "$PROJECT" ]] || die "current directory is not accessible"
 case "$PROJECT" in /|"$HOME") die "refusing to sandbox '$PROJECT' — cd into a project directory first" ;; esac
+
+# ----------------------------------------------------------------------------- export sessions to host
+if [[ "$EXPORT" == 1 ]]; then
+    vol="cc-session-$(hash_id "$PROJECT")"
+    docker volume inspect "$vol" >/dev/null 2>&1 || die "no saved sandbox sessions for this project"
+    slug="$(printf '%s' "$PROJECT" | sed 's#/#-#g')"
+    dest="$HOME/.claude/projects/$slug"
+    mkdir -p "$dest"
+    # Copy transcripts out of the volume, rewriting the in-box path to the real host path so
+    # `claude --resume` on the host keys and resolves them correctly. Runs as the host user so
+    # the exported files are owned by you, not root.
+    n="$(docker run --rm --user "$(id -u):$(id -g)" -v "$vol:/v:ro" -v "$dest:/out" \
+            -e DST="$PROJECT" alpine sh -c '
+              c=0
+              for f in /v/.claude/projects/-workspace-project/*.jsonl; do
+                [ -e "$f" ] || continue
+                sed "s#/workspace/project#${DST}#g" "$f" > "/out/$(basename "$f")" && c=$((c+1))
+              done
+              printf %s "$c"')"
+    [[ "${n:-0}" -gt 0 ]] || die "no session transcripts found in the volume"
+    echo "cc-sandbox: exported $n session(s) -> $dest"
+    echo "  NOTE: resuming on the host runs WITHOUT the sandbox (full host access)."
+    echo "  Continue with:  cd \"$PROJECT\" && claude --resume"
+    exit 0
+fi
 
 # ----------------------------------------------------------------------------- OAuth extraction
 # Extract ONLY claudeAiOauth (never mcpOAuth or anything else) into a private temp file.
@@ -142,7 +171,6 @@ GIT_NAME="$(git config --get user.name  2>/dev/null || true)"
 GIT_EMAIL="$(git config --get user.email 2>/dev/null || true)"
 
 # ----------------------------------------------------------------------------- per-project volumes
-hash_id() { printf '%s' "$1" | (have sha256sum && sha256sum || shasum -a 256) | cut -c1-12; }
 PID_HASH="$(hash_id "$PROJECT")"
 CACHE_VOL="cc-cache-${PID_HASH}"
 SESSION_VOL="cc-session-${PID_HASH}"
