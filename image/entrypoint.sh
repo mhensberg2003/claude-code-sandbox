@@ -39,10 +39,17 @@ else
     log "WARNING: no credentials injected — Claude Code will be unauthenticated."
 fi
 
-# --- 5b. Onboarding/account markers so Claude skips first-run login (token alone isn't enough) --
+# --- 5b. Seed ~/.claude.json: onboarding/account markers + pre-trust the project --------------
+# The project is always /workspace/project and the container IS the trust boundary, so the
+# folder-trust dialog inside the box is redundant — pre-accept it so Claude never prompts.
+TRUST='{"projects":{"/workspace/project":{"hasTrustDialogAccepted":true,"hasCompletedProjectOnboarding":true,"projectOnboardingSeenCount":1}}}'
 if [[ -f /run/cc-secret/claude-config.json ]]; then
-    install -o claude -g claude -m 0600 /run/cc-secret/claude-config.json /home/claude/.claude.json
+    jq -s '.[0] * .[1]' /run/cc-secret/claude-config.json <(printf '%s' "$TRUST") > /home/claude/.claude.json 2>/dev/null \
+        || printf '%s' "$TRUST" > /home/claude/.claude.json
+else
+    printf '%s' "$TRUST" > /home/claude/.claude.json
 fi
+chown "$HOST_UID:$HOST_GID" /home/claude/.claude.json && chmod 600 /home/claude/.claude.json
 
 # --- 6. Curated MCP config (context7 only); never the Host's MCP servers ------------------------
 install -o claude -g claude -m 0600 /etc/cc-sandbox/mcp.json /home/claude/.claude/.mcp.json 2>/dev/null || true
