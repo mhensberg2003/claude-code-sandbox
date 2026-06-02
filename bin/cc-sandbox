@@ -25,7 +25,10 @@ PIDS_LIMIT="${CC_SANDBOX_PIDS:-512}"
 # it yourself with a one-off `docker run -p ...` or use `--unsafe`.
 # Minimal caps the root entrypoint needs (firewall, uid-switch, setup chowns/ACLs). The agent runs
 # as non-root `claude` with NO ambient caps, so it cannot use any of these directly.
-CAPS=(NET_ADMIN SETUID SETGID CHOWN DAC_OVERRIDE FOWNER FSETID SETPCAP AUDIT_WRITE)
+# KILL: PID-1 tini runs as root but the child runs as `claude` (uid 1000, via gosu). Forwarding a
+# signal across that uid boundary requires CAP_KILL — without it tini hits EPERM on the first
+# signal it forwards (e.g. SIGWINCH on terminal resize, SIGINT, SIGTERM) and fatally crashes.
+CAPS=(NET_ADMIN SETUID SETGID CHOWN DAC_OVERRIDE FOWNER FSETID SETPCAP AUDIT_WRITE KILL)
 
 # ----------------------------------------------------------------------------- helpers
 die()  { echo "cc-sandbox: $*" >&2; exit 1; }
