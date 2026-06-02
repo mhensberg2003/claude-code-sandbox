@@ -2,13 +2,16 @@ name: publish-image
 
 # Builds the Sandbox policy image and publishes it to GHCR.
 # The `stable` tag is the trusted moving tag the Wrapper pulls via --pull=always, so a push here
-# propagates policy/security fixes to the whole fleet on their next run.
+# propagates policy/security fixes to the whole fleet on their next run. Because that tag is
+# load-bearing for the WHOLE fleet, publishing is gated on the security harness passing first.
 
 on:
   push:
     branches: [main]
-    paths: ['image/**', '.github/workflows/publish-image.yml']
+    paths: ['image/**', 'bin/**', 'test/**', '.github/workflows/publish-image.yml']
     tags: ['v*']
+  pull_request:
+    paths: ['image/**', 'bin/**', 'test/**', '.github/workflows/publish-image.yml']
   workflow_dispatch:
 
 concurrency:
@@ -16,7 +19,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate: build the image and assert the core security invariants (no root escalation, immutable
+  # firewall, command-egress blocked, token unreadable). Uses the SAME run policy the Wrapper applies
+  # (sourced via `cc-sandbox --print-run-policy`), and swaps in test/payload.sh so no Claude quota is used.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image for testing
+        run: docker build -t cc-sandbox:ci ./image
+
+      - name: Run security harness
+        run: ./test/security-harness.sh cc-sandbox:ci
+
   build-and-push:
+    needs: test
+    # Don't publish on PRs (no GHCR write / not the trusted source) — the test job still runs there.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
