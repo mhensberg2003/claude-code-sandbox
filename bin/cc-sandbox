@@ -37,7 +37,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 hash_id() { printf '%s' "$1" | { have sha256sum && sha256sum || shasum -a 256; } | cut -c1-12; }
 
 # ----------------------------------------------------------------------------- arg parsing
-RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXPORT=0; NO_CONFIG=0; CLAUDE_ARGS=()
+RESUME=0; FRESH=0; UNSAFE=0; EPHEMERAL=0; UPDATE=0; EXPORT=0; NO_CONFIG=0; PRINT_POLICY=0; CLAUDE_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --resume|--continue) RESUME=1 ;;
@@ -47,12 +47,22 @@ while [[ $# -gt 0 ]]; do
         --update)            UPDATE=1 ;;
         --export-session)    EXPORT=1 ;;
         --unsafe)            UNSAFE=1 ;;
+        --print-run-policy)  PRINT_POLICY=1 ;;  # internal: dump caps/memory/pids for the test harness
         --help|-h)           sed -n '2,16p' "$0"; exit 0 ;;
         --)                  shift; CLAUDE_ARGS+=("$@"); break ;;
         *)                   CLAUDE_ARGS+=("$1") ;;
     esac
     shift || true
 done
+
+# ----------------------------------------------------------------------------- print run policy
+# Machine-readable dump of the EXACT run policy (caps, memory, pid limit) as sourceable bash, so the
+# security harness applies the SAME locked flags real runs do and can never silently drift from it.
+# Internal/testing use; not advertised in --help.
+if [[ "$PRINT_POLICY" == 1 ]]; then
+    declare -p CAPS MEMORY PIDS_LIMIT
+    exit 0
+fi
 
 # ----------------------------------------------------------------------------- self-update
 if [[ "$UPDATE" == 1 ]]; then
