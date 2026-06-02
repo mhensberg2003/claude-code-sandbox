@@ -33,8 +33,8 @@ credentials, other projects, MCP-connected accounts, or run autonomous command-n
 
 | Layer | Policy |
 |---|---|
-| **Agent** (Claude itself, uid `claude`) | **Full internet** — API, WebSearch, WebFetch, context7 MCP |
-| **Commands** (every Bash command, uid `runner`) | **No network except a registry allowlist** (npm/PyPI/Go/crates/…) via a no-log CONNECT proxy |
+| **Agent** (Claude itself, uid `claude`) | **Full internet** — API, WebSearch, WebFetch |
+| **Commands & MCP servers** (every Bash command + context7, uid `runner`) | **No network except a registry allowlist** (npm/PyPI/Go/crates/context7/…) via a no-log CONNECT proxy |
 | **Filesystem** | Only the current project is mounted (read-write). No `$HOME`, no host env, no SSH/cloud creds |
 | **Auth** | Only your `claudeAiOauth` token is injected (never `mcpOAuth` or anything else) |
 | **Skills & global config** | Your `~/.claude/skills`, `CLAUDE.md`, and `rules/` are copied in read-only (symlinks dereferenced) so the agent behaves like it does on the host. Opt out with `--no-config`. **Not** brought: plugins, MCP servers, subagents, history |

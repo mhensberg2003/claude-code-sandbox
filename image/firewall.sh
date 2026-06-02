@@ -4,9 +4,13 @@
 # Run as root, ONCE, at container start (needs CAP_NET_ADMIN). After the entrypoint drops to the
 # unprivileged `claude` user (no caps), these rules are immutable for the session.
 #
-#   claude (= CLAUDE_UID, the host uid) -> full internet  (agent: API, WebSearch, WebFetch, context7)
-#   proxy  (61002)                      -> tcp 80/443 + DNS (fronts the registry allowlist)
+#   claude (= CLAUDE_UID, the host uid) -> full internet  (agent: API, WebSearch, WebFetch)
+#   proxy  (61002)                      -> tcp 80/443 + DNS (fronts the registry + context7 allowlist)
 #   runner (61001)                      -> loopback only    (can ONLY reach the proxy; else dropped)
+#
+# NOTE: MCP servers (context7) run as `runner`, not `claude` — Claude Code prefixes the MCP launch
+# with $CLAUDE_CODE_SHELL_PREFIX just like Bash commands. So context7 reaches its API through the
+# registry-allowlist proxy (context7.com is whitelisted there), not via claude's full internet.
 #
 # We ADD a dedicated table (no `flush ruleset`) so Docker's embedded-DNS NAT (127.0.0.11) survives.
 

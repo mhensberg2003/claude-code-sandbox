@@ -5,9 +5,11 @@
 #
 # Identities:
 #   root   (uid 0)    - entrypoint only: sets up firewall + proxy, then drops to `claude` and is gone
-#   claude (uid 1000) - runs Claude Code; firewall grants FULL internet (API, WebSearch, WebFetch, context7)
-#   runner (uid 1001) - runs every command; firewall grants ONLY the registry-allowlist proxy
-#   proxy  (uid 1002) - the CONNECT-allowlist proxy that fronts package registries (no logging)
+#   claude (uid 1000) - runs Claude Code; firewall grants FULL internet (API, WebSearch, WebFetch)
+#   runner (uid 1001) - runs every command AND every MCP server (Claude Code wraps MCP launches with
+#                       $CLAUDE_CODE_SHELL_PREFIX too); firewall grants ONLY the registry-allowlist
+#                       proxy, so context7 reaches its API via that allowlist, not full internet
+#   proxy  (uid 1002) - the CONNECT-allowlist proxy that fronts package registries + context7 (no logging)
 
 FROM ubuntu:24.04
 

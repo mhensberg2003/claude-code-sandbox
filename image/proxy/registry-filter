@@ -33,3 +33,9 @@
 (^|\.)nodejs\.org$
 (^|\.)debian\.org$
 (^|\.)ubuntu\.com$
+
+# context7 doc-lookup MCP. Claude Code wraps the MCP launch with $CLAUDE_CODE_SHELL_PREFIX too,
+# so context7-mcp runs as `runner` (proxy-only), not `claude` — its API fetch honours https_proxy
+# and lands here. Whitelisting it is what makes the MCP work; the server keeps the deprivileged
+# runner identity. Covers context7.com, mcp.context7.com, clerk.context7.com (auth).
+(^|\.)context7\.com$

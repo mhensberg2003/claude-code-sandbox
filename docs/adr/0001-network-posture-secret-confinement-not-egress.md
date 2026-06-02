@@ -10,8 +10,10 @@ The Sandbox exists to run Claude Code `--dangerously-skip-permissions` against a
 
 We split outbound traffic by **process**, not destination:
 
-- **Commands** (the `runner` uid) get only a curated **Registry allowlist** (npm/PyPI/Go/…), nothing else.
-- **Claude itself** (the `claude` uid) gets **full internet**, so `WebFetch`, `WebSearch`, the API, and the context7 MCP all work.
+- **Commands** (the `runner` uid) get only a curated **Registry allowlist** (npm/PyPI/Go/context7/…), nothing else.
+- **Claude itself** (the `claude` uid) gets **full internet**, so `WebFetch`, `WebSearch`, and the API all work.
+
+> **MCP caveat:** Claude Code prefixes MCP server launches with `$CLAUDE_CODE_SHELL_PREFIX` exactly as it does Bash-tool commands, so the context7 MCP actually runs as `runner` (proxy-only), not `claude`. It is therefore *not* on full internet — it reaches `context7.com` through the registry allowlist, which is where `context7.com` is whitelisted. This is a stricter posture than originally intended (the doc-lookup MCP stays deprivileged), at the cost of letting any `runner` command also reach `context7.com`.
 
 Exfil is therefore **not** stopped at the network layer. It is stopped at the **box**: the only things reachable inside are the one **Project's** source and the employee's own surgically-injected Claude OAuth token. Host credentials, other projects, SSH/cloud keys, and `mcpOAuth` are never present.
 
