@@ -76,12 +76,18 @@ fi
 gosu claude         git config --global --add safe.directory "$PROJECT_DIR" || true
 sudo -n -u runner   git config --global --add safe.directory "$PROJECT_DIR" || true
 
-# --- 8. Grant `runner` write access to the project WITHOUT changing ownership -------------------
-# Commands run as runner but the project is owned by the host uid (= claude). ACLs let runner
-# create/rename files (npm install, build outputs) while keeping claude as the real owner.
+# --- 8. Cross-uid project access via ACLs WITHOUT changing ownership ----------------------------
+# Two uids touch the bind-mounted project, and the host user (uid=$HOST_UID) must be able to manage
+# whatever EITHER produces, back on the host:
+#   - `runner` (cmd uid) creates files (npm install, builds, git objects) owned by runner's uid.
+#   - `claude` (= $HOST_UID) edits files owned by the host uid.
+# Granting runner rwX lets commands write claude-owned files IN-box. Granting $HOST_UID rwX (access
+# + default) means runner-created files carry a user:$HOST_UID ACL, so ON the host your user can
+# delete/overwrite them — otherwise `next build`, `rm -rf`, git, etc. hit EACCES on runner-owned
+# files. The -R access pass also retroactively heals files left by earlier sessions on each launch.
 if [[ -d "$PROJECT_DIR" ]]; then
-    setfacl -R  -m u:runner:rwX "$PROJECT_DIR" 2>/dev/null || log "note: could not set ACLs (non-ext4 mount?) — continuing"
-    setfacl -Rd -m u:runner:rwX "$PROJECT_DIR" 2>/dev/null || true
+    setfacl -R  -m u:runner:rwX -m "u:${HOST_UID}:rwX" "$PROJECT_DIR" 2>/dev/null || log "note: could not set ACLs (non-ext4 mount?) — continuing"
+    setfacl -Rd -m u:runner:rwX -m "u:${HOST_UID}:rwX" "$PROJECT_DIR" 2>/dev/null || true
 fi
 
 # --- 9. Hand off to the agent as unprivileged `claude`. Firewall is now immutable for it. -------

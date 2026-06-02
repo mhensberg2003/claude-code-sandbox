@@ -35,6 +35,14 @@ check "sudo-drop-to-runner"        OK       "$a"
 $RX 'touch /workspace/project/.cc-write-test && rm -f /workspace/project/.cc-write-test' && a=OK || a=FAIL
 check "command-can-write-project"  OK       "$a"
 
+# Host manageability: a dir+file CREATED BY runner must be deletable by claude (= the host uid), or
+# sandbox-produced build artifacts / .git objects are un-removable on the host (EACCES). The
+# unlink needs write on the runner-owned dir, which only the default-ACL grant for HOST_UID provides.
+$RX 'mkdir -p /workspace/project/.cc-acltest && touch /workspace/project/.cc-acltest/f'
+rm -f /workspace/project/.cc-acltest/f 2>/dev/null && a=OK || a=EACCES
+check "host-uid-can-delete-runner-file" OK  "$a"
+rmdir /workspace/project/.cc-acltest 2>/dev/null || $RX 'rm -rf /workspace/project/.cc-acltest' || true
+
 $RX 'cat /home/claude/.claude/.credentials.json' >/dev/null 2>&1 && a=YES || a=NO
 check "command-cannot-read-token"  NO       "$a"
 
