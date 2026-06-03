@@ -11,15 +11,28 @@ HOST_GID="${HOST_GID:-1000}"
 PROJECT_DIR="${CC_PROJECT_PATH:-/workspace/project}"
 
 # --- 1. Remap `claude` to the real host uid/gid so it can write the bind-mounted project --------
-if [[ "$(id -u claude)" != "$HOST_UID" ]]; then
-    groupmod -g "$HOST_GID" claude 2>/dev/null || true
-    usermod  -u "$HOST_UID" -g "$HOST_GID" claude
-    chown -R "$HOST_UID:$HOST_GID" /home/claude
+# On a Linux host the bind mount carries real uids, so `claude` must adopt $HOST_UID to own what it
+# writes. On Docker Desktop (macOS/Windows) the file-sharing layer virtualizes ownership, so the
+# in-box uid is irrelevant — AND $HOST_UID (e.g. 501 on macOS) != 1000 triggers a usermod that can't
+# lock the read-only /etc, which used to abort the whole container. So the remap is best-effort:
+# if it can't run, keep claude's built-in uid and thread THAT through the rest of the setup.
+EFFECTIVE_UID="$(id -u claude)"
+EFFECTIVE_GID="$(id -g claude)"
+if [[ "$EFFECTIVE_UID" != "$HOST_UID" ]]; then
+    if groupmod -g "$HOST_GID" claude 2>/dev/null \
+       && usermod -u "$HOST_UID" -g "$HOST_GID" claude 2>/dev/null; then
+        chown -R "$HOST_UID:$HOST_GID" /home/claude
+        EFFECTIVE_UID="$HOST_UID"
+        EFFECTIVE_GID="$HOST_GID"
+    else
+        log "note: could not remap claude -> ${HOST_UID}:${HOST_GID} (read-only /etc, e.g. Docker Desktop) — running as built-in uid ${EFFECTIVE_UID}; the file-sharing layer virtualizes bind-mount ownership"
+    fi
 fi
-export CLAUDE_UID="$HOST_UID"
+# Everything downstream (firewall egress match, home chowns) keys on the uid claude ACTUALLY runs as.
+export CLAUDE_UID="$EFFECTIVE_UID"
 
 # --- 2. Egress firewall (fail loud; never fail open) -------------------------------------------
-if ! CLAUDE_UID="$HOST_UID" /usr/local/sbin/cc-firewall; then
+if ! CLAUDE_UID="$EFFECTIVE_UID" /usr/local/sbin/cc-firewall; then
     log "FATAL: could not install egress firewall — refusing to start."
     exit 1
 fi
@@ -31,7 +44,7 @@ log "registry-allowlist proxy up on 127.0.0.1:8118"
 
 # --- 4. Writable homes (rootfs is read-only; these are tmpfs/volumes) ---------------------------
 install -d -o claude -g claude -m 0700 /home/claude/.claude
-chown "$HOST_UID:$HOST_GID" /home/claude /home/claude/.claude 2>/dev/null || true
+chown "$EFFECTIVE_UID:$EFFECTIVE_GID" /home/claude /home/claude/.claude 2>/dev/null || true
 install -d -o runner -g runner -m 0755 /home/runner
 
 # --- 5. Surgical OAuth: copy ONLY the injected token into claude's home (accepted exfil risk) ---
@@ -53,7 +66,7 @@ if [[ -f /run/cc-secret/claude-config.json ]]; then
 else
     printf '%s' "$TRUST" > /home/claude/.claude.json
 fi
-chown "$HOST_UID:$HOST_GID" /home/claude/.claude.json && chmod 600 /home/claude/.claude.json
+chown "$EFFECTIVE_UID:$EFFECTIVE_GID" /home/claude/.claude.json && chmod 600 /home/claude/.claude.json
 
 # --- 6. Curated MCP config (context7 only); never the Host's MCP servers ------------------------
 install -o claude -g claude -m 0600 /etc/cc-sandbox/mcp.json /home/claude/.claude/.mcp.json 2>/dev/null || true
@@ -64,7 +77,7 @@ install -o claude -g claude -m 0600 /etc/cc-sandbox/mcp.json /home/claude/.claud
 # but never touching the host originals.
 if [[ -d /run/cc-secret/user-claude ]]; then
     cp -r /run/cc-secret/user-claude/. /home/claude/.claude/ 2>/dev/null || true
-    chown -R "$HOST_UID:$HOST_GID" /home/claude/.claude 2>/dev/null || true
+    chown -R "$EFFECTIVE_UID:$EFFECTIVE_GID" /home/claude/.claude 2>/dev/null || true
     log "seeded host skills + global CLAUDE.md/rules"
 fi
 
@@ -92,7 +105,7 @@ fi
 
 # --- 9. Hand off to the agent as unprivileged `claude`. Firewall is now immutable for it. -------
 cd "$PROJECT_DIR" 2>/dev/null || cd /workspace
-log "launching Claude Code as claude (uid=${HOST_UID})"
+log "launching Claude Code as claude (uid=${EFFECTIVE_UID})"
 exec gosu claude env \
     HOME=/home/claude USER=claude SHELL=/bin/bash \
     CLAUDE_CODE_SHELL_PREFIX=/usr/local/bin/cc-runner-exec \
