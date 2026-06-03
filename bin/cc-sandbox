@@ -107,7 +107,7 @@ if [[ "$UNSAFE" == 1 ]]; then
     warn "# Commands have full network + filesystem access.           #"
     warn "############################################################"
     have claude || die "claude not found on PATH for --unsafe mode"
-    exec claude --dangerously-skip-permissions "${CLAUDE_ARGS[@]}"
+    exec claude --dangerously-skip-permissions ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"}
 fi
 
 # ----------------------------------------------------------------------------- preflight
@@ -266,7 +266,7 @@ if [[ "$EPHEMERAL" == 1 ]]; then
 else
     ARGS+=(-v "${SESSION_VOL}:/home/claude")
     # Native session picker: lists this project's past sessions to choose from.
-    [[ "$RESUME" == 1 ]] && CLAUDE_ARGS=(--resume "${CLAUDE_ARGS[@]}")
+    [[ "$RESUME" == 1 ]] && CLAUDE_ARGS=(--resume ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"})
 fi
 
 # OAuth token + onboarding markers (read-only); entrypoint copies them into the ephemeral home.
@@ -281,6 +281,6 @@ fi
 
 # No host port forwarding: the box publishes nothing, so it can never occupy host ports.
 
-ARGS+=("$IMAGE" "${CLAUDE_ARGS[@]}")
+ARGS+=("$IMAGE" ${CLAUDE_ARGS[@]+"${CLAUDE_ARGS[@]}"})
 
 exec docker "${ARGS[@]}"
