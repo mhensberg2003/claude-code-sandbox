@@ -44,6 +44,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # QEMU lets the amd64 runner cross-build the arm64 variant so Apple Silicon hosts can pull.
+      - uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
@@ -67,6 +70,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./image
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
