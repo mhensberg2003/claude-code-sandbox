@@ -34,7 +34,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Claude Code CLI ---
-RUN npm install -g @anthropic-ai/claude-code \
+# Pinned for reproducible builds (two builds yield the SAME CC version). Renovate bumps the ARG
+# default via the annotation below; that edit touches image/** and so triggers a republish.
+# renovate: datasource=npm depName=@anthropic-ai/claude-code
+ARG CLAUDE_CODE_VERSION=2.1.165
+RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npm cache clean --force
 
 # --- pnpm (baked alongside npm; the agent picks per-project). Its store lives in runner's HOME
