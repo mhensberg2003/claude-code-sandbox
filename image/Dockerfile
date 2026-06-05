@@ -11,7 +11,7 @@
 #                       proxy, so context7 reaches its API via that allowlist, not full internet
 #   proxy  (uid 1002) - the CONNECT-allowlist proxy that fronts package registries + context7 (no logging)
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
