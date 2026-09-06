@@ -37,7 +37,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Pinned for reproducible builds (two builds yield the SAME CC version). Renovate bumps the ARG
 # default via the annotation below; that edit touches image/** and so triggers a republish.
 # renovate: datasource=npm depName=@anthropic-ai/claude-code
-ARG CLAUDE_CODE_VERSION=2.1.260
+ARG CLAUDE_CODE_VERSION=2.1.263
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
     && npm cache clean --force
 
